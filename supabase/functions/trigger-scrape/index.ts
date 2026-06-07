@@ -84,11 +84,16 @@ serve(async (req) => {
     console.log('Job created:', job.id);
 
     // Call N8N webhook with retry logic and proper timeout
-    const n8nWebhookUrl = Deno.env.get('N8N_WEBHOOK_URL') || 'https://n8n-ffai-u38114.vm.elestio.app/webhook/vc-registry-scraper';
+    const n8nWebhookUrl = Deno.env.get('N8N_WEBHOOK_URL');
+    if (!n8nWebhookUrl) {
+      throw new Error('N8N_WEBHOOK_URL environment variable not configured');
+    }
     const webhookToken = Deno.env.get('N8N_WEBHOOK_TOKEN'); // Optional auth token
     
     const MAX_RETRIES = 3;
-    const TIMEOUT_MS = 1500000; // 25 minutes for full workflow completion
+    // Supabase Edge Functions have a 300s (5 minute) hard execution limit.
+    // We set timeout to 270s to leave 30s buffer for DB operations and response.
+    const TIMEOUT_MS = 270000; // 4.5 minutes (buffer below Supabase's 300s limit)
     let lastError: string = '';
     let webhookSuccess = false;
 
@@ -165,7 +170,7 @@ serve(async (req) => {
 
         const isTimeout = webhookError instanceof Error && webhookError.name === 'AbortError';
         const errorMsg = isTimeout
-          ? `Timeout after ${TIMEOUT_MS}ms (25 minutes) - workflow exceeded maximum execution time`
+          ? `Timeout after ${TIMEOUT_MS}ms (${TIMEOUT_MS / 1000}s) - n8n workflow did not respond in time`
           : webhookError instanceof Error ? webhookError.message : 'Unknown error';
         
         lastError = errorMsg;
@@ -194,8 +199,13 @@ serve(async (req) => {
     }
 
     return new Response(
-      JSON.stringify({ success: true, jobId: job.id }),
-      { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      JSON.stringify({ 
+        success: webhookSuccess, 
+        jobId: job.id,
+        status: webhookSuccess ? 'running' : 'failed',
+        error: webhookSuccess ? null : `N8N webhook failed after ${MAX_RETRIES} attempts: ${lastError}`
+      }),
+      { status: webhookSuccess ? 200 : 502, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     );
   } catch (error) {
     console.error('Error in trigger-scrape:', error);
