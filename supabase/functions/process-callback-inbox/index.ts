@@ -79,7 +79,8 @@ async function checkCompanyActive(companyName: string): Promise<{
   matches?: any[];
 }> {
   if (!COMPANIES_HOUSE_API_KEY) {
-    return { active: true, source: 'unknown', note: 'API key not configured' };
+    console.warn(`checkCompanyActive: No API key configured — skipping active check for "${companyName}"`);
+    return { active: true, source: 'unknown', note: 'No API key configured — check skipped, entity passed by default' };
   }
   
   try {
@@ -93,14 +94,16 @@ async function checkCompanyActive(companyName: string): Promise<{
     });
     
     if (!response.ok) {
-      return { active: true, source: 'companies_house', note: 'API request failed' };
+      console.error(`checkCompanyActive: Companies House API returned ${response.status} for "${companyName}" — failing closed`);
+      return { active: false, source: 'companies_house', note: `API returned HTTP ${response.status} — could not verify active status` };
     }
     
     const data = await response.json();
     const companies = data.items || [];
     
     if (companies.length === 0) {
-      return { active: true, source: 'companies_house', note: 'No matches found' };
+      console.log(`checkCompanyActive: No matches found for "${companyName}" in Companies House — failing closed`);
+      return { active: false, source: 'companies_house', note: 'No matching company found in registry' };
     }
     
     // Check if any match is active
@@ -130,8 +133,8 @@ async function checkCompanyActive(companyName: string): Promise<{
       matches: companies.slice(0, 3),
     };
   } catch (error) {
-    console.error('Error checking company status:', error);
-    return { active: true, source: 'companies_house', note: 'Error during check' };
+    console.error(`checkCompanyActive: Error checking "${companyName}":`, error);
+    return { active: false, source: 'companies_house', note: `Error during check: ${error instanceof Error ? error.message : 'Unknown error'}` };
   }
 }
 
