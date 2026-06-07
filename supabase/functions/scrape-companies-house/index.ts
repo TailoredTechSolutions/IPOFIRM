@@ -160,11 +160,18 @@ serve(async (req) => {
       .update({ status: 'processing' })
       .eq('id', job.id);
 
-    // Trigger the processing function
-    const processResponse = await supabaseAdmin.functions.invoke('process-callback-inbox');
+    // Trigger the processing function via HTTP fetch (more reliable than SDK invoke)
+    const processUrl = `${Deno.env.get('SUPABASE_URL')}/functions/v1/process-callback-inbox`;
+    const serviceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY');
     
-    if (processResponse.error) {
-      console.error('Error processing inbox:', processResponse.error);
+    if (processUrl && serviceKey) {
+      fetch(processUrl, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${serviceKey}`,
+          'Content-Type': 'application/json'
+        }
+      }).catch(err => console.error('Error triggering process-callback-inbox:', err));
     }
 
     return new Response(

@@ -29,12 +29,20 @@ const handler = async (req: Request): Promise<Response> => {
 
     const accountSid = Deno.env.get("TWILIO_ACCOUNT_SID");
     const authToken = Deno.env.get("TWILIO_AUTH_TOKEN");
-    const twilioPhoneNumber = Deno.env.get("TWILIO_PHONE_NUMBER") || "+447723477293"; // Default Twilio number
+    const twilioPhoneNumber = Deno.env.get("TWILIO_PHONE_NUMBER");
 
     if (!accountSid || !authToken) {
       console.error("Missing Twilio credentials");
       return new Response(
         JSON.stringify({ error: "Twilio not configured" }),
+        { status: 500, headers: { "Content-Type": "application/json", ...corsHeaders } }
+      );
+    }
+
+    if (!twilioPhoneNumber) {
+      console.error("Missing TWILIO_PHONE_NUMBER");
+      return new Response(
+        JSON.stringify({ error: "Twilio phone number not configured" }),
         { status: 500, headers: { "Content-Type": "application/json", ...corsHeaders } }
       );
     }
